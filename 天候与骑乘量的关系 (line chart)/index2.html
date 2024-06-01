@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>D3.js Chart</title>
+    <script src="https://d3js.org/d3.v6.min.js"></script>
+    <style>
+        .bar {
+            fill: steelblue;
+        }
+        .line {
+            fill: none;
+            stroke: red;
+            stroke-width: 2px;
+        }
+        .dot {
+            fill: red;
+            stroke: red;
+        }
+        .axis-label {
+            font-size: 12px;
+        }
+        .tooltip {
+            position: absolute;
+            text-align: center;
+            width: 80px;
+            height: 28px;
+            padding: 2px;
+            font: 12px sans-serif;
+            background: lightsteelblue;
+            border: 0px;
+            border-radius: 8px;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+<div id="tooltip" class="tooltip" style="opacity:0;"></div>
+<svg width="960" height="600"></svg>
+<script>
+d3.csv("climate.csv").then(data => {
+    // Parse date and cast numbers
+    const parseDate = d3.timeParse("%Y%m");
+    const formatDate = d3.timeFormat("%Y-%m");
+    data.forEach(d => {
+        d.date = parseDate(d.date);
+        d.rainyDays = +d.rainyDays;
+        d.bikeUsage = +d.bikeUsage;
+    });
+
+    const margin = {top: 20, right: 80, bottom: 80, left: 80};
+    const width = 960 - margin.left - margin.right;
+    const height = 600 - margin.top - margin.bottom;
+
+    const svg = d3.select("svg")
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", height + margin.top + margin.bottom)
+      .append("g")
+        .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+    const tooltip = d3.select("#tooltip");
+
+    // X scale and axis
+    const x = d3.scaleTime()
+        .domain(d3.extent(data, d => d.date))
+        .range([0, width]);
+
+    const xAxis = d3.axisBottom(x).tickFormat(formatDate);
+
+    // Y0 scale and axis (for rainyDays)
+    const y0 = d3.scaleLinear()
+        .domain([0, d3.max(data, d => d.rainyDays)]).nice()
+        .range([0, height]);
+
+    const yAxisLeft = d3.axisLeft(y0);
+
+    // Y1 scale and axis (for bikeUsage)
+    const y1 = d3.scaleLinear()
+        .domain([0, d3.max(data, d => d.bikeUsage)]).nice()
+        .range([height, 0]);
+
+    const yAxisRight = d3.axisRight(y1);
+
+    // Bars (rainyDays)
+    svg.selectAll(".bar")
+        .data(data)
+      .enter().append("rect")
+        .attr("class", "bar")
+        .attr("x", d => x(d.date) - 10)
+        .attr("y", 0)
+        .attr("width", 20)
+        .attr("height", d => y0(d.rainyDays))
+        .on("mouseover", (event, d) => {
+            tooltip.transition()
+                .duration(200)
+                .style("opacity", .9);
+            tooltip.html(`Date: ${formatDate(d.date)}<br/>Rainy Days: ${d.rainyDays}`)
+                .style("left", (event.pageX) + "px")
+                .style("top", (event.pageY - 28) + "px");
+        })
+        .on("mouseout", () => {
+            tooltip.transition()
+                .duration(500)
+                .style("opacity", 0);
+        });
+
+    // Line (bikeUsage)
+    const line = d3.line()
+        .x(d => x(d.date))
+        .y(d => y1(d.bikeUsage));
+
+    svg.append("path")
+        .datum(data)
+        .attr("class", "line")
+        .attr("d", line);
+
+    // Points (bikeUsage)
+    svg.selectAll(".dot")
+        .data(data)
+      .enter().append("circle")
+        .attr("class", "dot")
+        .attr("cx", d => x(d.date))
+        .attr("cy", d => y1(d.bikeUsage))
+        .attr("r", 3)
+        .on("mouseover", (event, d) => {
+            tooltip.transition()
+                .duration(200)
+                .style("opacity", .9);
+            tooltip.html(`Date: ${formatDate(d.date)}<br/>Bike Usage: ${d.bikeUsage}`)
+                .style("left", (event.pageX) + "px")
+                .style("top", (event.pageY - 28) + "px");
+        })
+        .on("mouseout", () => {
+            tooltip.transition()
+                .duration(500)
+                .style("opacity", 0);
+        });
+
+    // X axis (bottom)
+    svg.append("g")
+        .attr("transform", "translate(0," + height + ")")
+        .call(xAxis)
+      .selectAll("text")
+        .style("text-anchor", "end")
+        .attr("dx", "-0.8em")
+        .attr("dy", "-0.5em")
+        .attr("transform", "rotate(-45)");
+
+    // Left Y axis
+    svg.append("g")
+        .attr("transform", "translate(-10,0)")
+        .call(yAxisLeft)
+      .append("text")
+        .attr("fill", "#000")
+        .attr("transform", "rotate(-90)")
+        .attr("y", -60)
+        .attr("dy", "0.71em")
+        .attr("text-anchor", "end")
+        .text("Rainy Days");
+
+    // Right Y axis
+    svg.append("g")
+        .attr("transform", "translate(" + (width + 10) + ",0)")
+        .call(yAxisRight)
+      .append("text")
+        .attr("fill", "#000")
+        .attr("transform", "rotate(-90)")
+        .attr("y", 60)
+        .attr("dy", "-0.0m")
+        .attr("text-anchor", "end")
+        .text("Bike Usage");
+
+    // Bottom X axis label
+    svg.append("text")
+        .attr("x", width / 2)
+        .attr("y", height + 50)
+        .attr("text-anchor", "middle")
+        .attr("class", "axis-label")
+        .text("Date (YYYY-MM)");
+});
+</script>
+</body>
+</html>

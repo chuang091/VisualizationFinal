@@ -32,13 +32,19 @@
     <script>
         const width = 960;
         const height = 600;
+        // 饼图额外半径比率
+        const pieExtraRadius = 1.4;
 
         // 設置SVG和tooltip
         const svg = d3.select("svg");
         const tooltip = d3.select(".tooltip");
 
         // 定義顏色標度
-        const color = d3.scaleOrdinal(d3.schemeCategory10);
+        const tableauColors = d3.schemeTableau10; // T10种颜色
+        const set3Colors = d3.schemeSet3; // 9种颜色
+
+        const combinedColors = [...tableauColors, ...set3Colors]; // 将两个颜色数组合并，得到19种颜色
+        const color = d3.scaleOrdinal(combinedColors); // 创建序数比例尺
 
         // 讀取CSV文件並生成圖表
         d3.csv("matrix.csv").then(data => {
@@ -47,17 +53,17 @@
             const districtSet = new Set();
             const header = data.columns.slice(1);
 
-            // 將行列轉換為節點和連接數據
             data.forEach(row => {
                 const source = row[''];
                 if (!districtSet.has(source)) {
-                    nodes.push({ id: source, value: +row[source] });
+                    nodes.push({ id: source, value: +row[source], linkData: [] });
                     districtSet.add(source);
                 }
                 header.forEach(target => {
                     const value = +row[target];
                     if (source !== target && value > 0) {
                         links.push({ source: source, target: target, value: value });
+                        nodes.find(n => n.id === source).linkData.push({ target: target, value: value });
                     }
                 });
             });
@@ -66,6 +72,10 @@
             const linkValues = links.map(d => d.value);
             const maxLinkValue = Math.max(...linkValues);
             const minLinkValue = Math.min(...linkValues);
+
+            const pie = d3.pie().value(d => d.value);
+            const arc = d3.arc();
+
 
             const infernoScale = d3.scaleSequential(d3.interpolateInferno)
                 .domain([minLinkValue, maxLinkValue]);
@@ -122,6 +132,69 @@
                         .style("opacity", 0);
                 });
 
+        const pieGroups = svg.selectAll(".pieGroup")
+            .data(nodes)
+            .enter().append("g")
+            .attr("class", "pieGroup");
+
+        function ticked() {
+            node.attr("cx", d => d.x)
+                .attr("cy", d => d.y);
+
+            link.attr("x1", d => d.source.x)
+                .attr("y1", d => d.source.y)
+                .attr("x2", d => d.target.x)
+                .attr("y2", d => d.target.y);
+
+            pieGroups.attr("transform", d => `translate(${d.x}, ${d.y})`)
+                .each(drawPie);
+        }
+
+        function drawPie(nodeData) {
+            const pieData = pie(nodeData.linkData);
+            const nodeRadius = Math.sqrt(nodeData.value) / 100;
+            const g = d3.select(this);
+            const path = g.selectAll("path")
+                .data(pieData);
+
+            path.enter().append("path")
+                .merge(path)
+                .attr("d", arc.innerRadius(nodeRadius).outerRadius(nodeRadius*pieExtraRadius))
+                .attr("fill", d => color(d.data.target));
+
+            path.exit().remove();
+        }
+
+        node.on("dblclick", function(event, d) {
+            if (d3.select(this).classed("focused")) {
+                // 如果节点已经聚焦，恢复显示所有节点和边
+                node.style("opacity", 1);
+                link.style("opacity", 1);
+                node.classed("focused", false);
+            } else{
+                const connectedNodes = new Set();
+                connectedNodes.add(d.id); // 添加自身
+                d3.select(this).classed("focused", true);
+
+                links.forEach(link => {
+                    if (link.source.id === d.id) {
+                        connectedNodes.add(link.target.id);
+                        console.log(link);
+                    }
+                    if (link.target.id === d.id) {
+                        connectedNodes.add(link.source.id);
+                        console.log(link);
+                    }
+                });
+                console.log(connectedNodes);
+                // 更新节点和边的显示状态
+                node.style("opacity", node => connectedNodes.has(node.id) ? 1 : 0);
+                // 只保留与d直接相连的边
+                link.style("opacity", link => link.source.id === d.id || link.target.id === d.id ? 1 : 0);
+
+                // 更新饼图的显示状态
+                pieGroups.style("opacity", pieGroup => connectedNodes.has(pieGroup.id) ? 1 : 0);
+        }});
             node.append("title")
                 .text(d => d.id);
 
@@ -132,17 +205,6 @@
             simulation.force("link")
                 .links(links);
 
-            function ticked() {
-                link
-                    .attr("x1", d => d.source.x)
-                    .attr("y1", d => d.source.y)
-                    .attr("x2", d => d.target.x)
-                    .attr("y2", d => d.target.y);
-
-                node
-                    .attr("cx", d => d.x)
-                    .attr("cy", d => d.y);
-            }
 
             function dragstarted(event, d) {
                 if (!event.active) simulation.alphaTarget(0.3).restart();

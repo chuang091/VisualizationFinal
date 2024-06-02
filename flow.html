@@ -11,45 +11,69 @@
     <style>
         body, html {
             height: 100%;
+            width: 100%;
             margin: 0;
+            display: flex;
+            flex-direction: row;
+        }
+
+        #map {
+            width: 50%;
+            height: 100%;
+        }
+
+        #dashboard {
+            width: 50%;
+            height: 100%;
             display: flex;
             flex-direction: column;
         }
-        #map {
-            width: 100%;
-            height: 50%;
-        }
-        #dashboard {
-            width: 100%;
-            height: 50%;
-            display: flex;
-        }
+
         #graph {
-            width: 50%;
-            height: 100%;
+            width: 100%;
+            height: 50%;
             position: relative;
         }
+
         #other {
-            width: 50%;
-            height: 100%;
+            width: 100%;
+            height: 50%;
             background-color: #f0f0f0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
+
         .link {
             stroke-opacity: 0.6;
         }
+
         .node text {
             pointer-events: none;
             font-size: 10px;
         }
-        .tooltip {
-            position: absolute;
-            text-align: center;
-            padding: 8px;
-            font: 12px sans-serif;
-            background: lightsteelblue;
-            border: 0;
-            border-radius: 8px;
-            pointer-events: none;
+
+        .highlight {
+            stroke: #ff0;
+            stroke-width: 3px;
+            stroke-opacity: 1;
+        }
+
+        .label {
+            font-size: 12px;
+            font-family: Arial, sans-serif;
+            text-anchor: middle;
+        }
+
+        .center-text {
+            font-size: 24px;
+            font-family: Arial, sans-serif;
+            text-anchor: middle;
+            dominant-baseline: middle;
+        }
+
+        .highlight {
+            opacity: 0.8;
         }
     </style>
 </head>
@@ -58,15 +82,17 @@
     <div id="dashboard">
         <div id="graph">
             <svg width="100%" height="100%"></svg>
-            <div class="tooltip" style="opacity: 0;"></div>
         </div>
         <div id="other">
-            <!-- 這裡可以添加其他內容 -->
+            <div class="pie-chart"></div>
         </div>
     </div>
     <script>
+        let geojsonData;
+        let highlightLayer;
+
         // 設置地圖
-        const map = L.map('map').setView([25.0330, 121.5654], 12);
+        const map = L.map('map').setView([25.0630, 121.5614], 12);
 
         // 添加輕量風格的底圖
         L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
@@ -79,14 +105,51 @@
         const svg = d3.select("#map").select("svg");
         const g = svg.append("g").attr("class", "leaflet-zoom-hide");
 
-        const tooltip = d3.select(".tooltip");
-
         // 定義顏色標度
         const color = d3.scaleOrdinal(d3.schemeCategory10);
 
         // 添加台北市的GeoJSON
-        d3.json("taipei.geojson").then(geojsonData => {
-            L.geoJSON(geojsonData).addTo(map);
+        d3.json("taipei.geojson").then(data => {
+            geojsonData = data;
+            L.geoJSON(geojsonData, {
+                onEachFeature: function (feature, layer) {
+                    layer.on('mouseover', function () {
+                        layer.setStyle({
+                            weight: 3,
+                            color: '#ff0',
+                            dashArray: '',
+                            fillOpacity: 0.7
+                        });
+
+                        // 在控制台記錄TOWNNAME
+                        console.log(feature.properties.TOWNNAME);
+
+                        // 高亮顯示對應的節點
+                        d3.selectAll(".node")
+                            .filter(d => d.id === feature.properties.TOWNNAME)
+                            .attr("stroke", "#ff0")
+                            .attr("stroke-width", 3);
+
+                        // 更新饼图
+                        updatePieChart(feature.properties.TOWNNAME);
+                    });
+                    layer.on('mouseout', function () {
+                        layer.setStyle({
+                            weight: 1,
+                            color: '#3388ff',
+                            dashArray: '',
+                            fillOpacity: 0.2
+                        });
+
+                        // 移除高亮顯示
+                        d3.selectAll(".node")
+                            .filter(d => d.id === feature.properties.TOWNNAME)
+                            .attr("stroke", null)
+                            .attr("stroke-width", null);
+                    });
+                    layer.bindPopup('<strong>' + feature.properties.TOWNNAME + '</strong>');
+                }
+            }).addTo(map);
         });
 
         // 讀取CSV文件並生成圖表
@@ -132,17 +195,10 @@
                     .attr("stroke", d => infernoScale(d.value))
                     .attr("stroke-opacity", 0.6)
                     .on("mouseover", function(event, d) {
-                        tooltip.transition()
-                            .duration(200)
-                            .style("opacity", .9);
-                        tooltip.html("From: " + d.source + "<br/>To: " + d.target + "<br/>Value: " + d.value)
-                            .style("left", (event.pageX) + "px")
-                            .style("top", (event.pageY - 28) + "px");
+                        d3.select(this).classed("highlight", true);
                     })
                     .on("mouseout", function(d) {
-                        tooltip.transition()
-                            .duration(500)
-                            .style("opacity", 0);
+                        d3.select(this).classed("highlight", false);
                     });
 
                 const node = g.selectAll("circle")
@@ -152,17 +208,32 @@
                     .attr("r", d => Math.sqrt(d.value) / 100)
                     .attr("fill", d => color(d.id))
                     .on("mouseover", function(event, d) {
-                        tooltip.transition()
-                            .duration(200)
-                            .style("opacity", .9);
-                        tooltip.html(d.id + "<br/>" + "Value: " + d.value)
-                            .style("left", (event.pageX) + "px")
-                            .style("top", (event.pageY - 28) + "px");
+                        d3.select(this).classed("highlight", true);
+
+                        // 高亮顯示對應的地圖區域
+                        if (highlightLayer) {
+                            map.removeLayer(highlightLayer);
+                        }
+                        highlightLayer = L.geoJSON(geojsonData, {
+                            style: function(feature) {
+                                if (feature.properties.TOWNNAME === d.id) {
+                                    return { color: "#ff0", weight: 3, fillOpacity: 0.7 };
+                                } else {
+                                    return { color: "#3388ff", weight: 1, fillOpacity: 0.2 };
+                                }
+                            }
+                        }).addTo(map);
+
+                        // 更新饼图
+                        updatePieChart(d.id);
                     })
                     .on("mouseout", function(d) {
-                        tooltip.transition()
-                            .duration(500)
-                            .style("opacity", 0);
+                        d3.select(this).classed("highlight", false);
+
+                        // 移除地圖區域高亮
+                        if (highlightLayer) {
+                            map.removeLayer(highlightLayer);
+                        }
                     });
 
                 // 更新位置
@@ -213,7 +284,12 @@
                         }
                     });
                 });
+                const linkValues = links.map(d => d.value);
+                const maxLinkValue = Math.max(...linkValues);
+                const minLinkValue = Math.min(...linkValues);
 
+                const infernoScale = d3.scaleSequential(d3.interpolateInferno)
+                    .domain([minLinkValue, maxLinkValue]);
                 const simulation = d3.forceSimulation(nodes)
                     .force("link", d3.forceLink(links).id(d => d.id).distance(100))
                     .force("charge", d3.forceManyBody().strength(-500))
@@ -228,17 +304,10 @@
                     .attr("stroke", d => infernoScale(d.value))
                     .attr("stroke-opacity", 0.6)
                     .on("mouseover", function(event, d) {
-                        tooltip.transition()
-                            .duration(200)
-                            .style("opacity", .9);
-                        tooltip.html("From: " + d.source + "<br/>To: " + d.target + "<br/>Value: " + d.value)
-                            .style("left", (event.pageX) + "px")
-                            .style("top", (event.pageY - 28) + "px");
+                        d3.select(this).classed("highlight", true);
                     })
                     .on("mouseout", function(d) {
-                        tooltip.transition()
-                            .duration(500)
-                            .style("opacity", 0);
+                        d3.select(this).classed("highlight", false);
                     });
 
                 const node = svg.append("g")
@@ -253,17 +322,32 @@
                         .on("drag", dragged)
                         .on("end", dragended))
                     .on("mouseover", function(event, d) {
-                        tooltip.transition()
-                            .duration(200)
-                            .style("opacity", .9);
-                        tooltip.html(d.id + "<br/>" + "Value: " + d.value)
-                            .style("left", (event.pageX) + "px")
-                            .style("top", (event.pageY - 28) + "px");
+                        d3.select(this).classed("highlight", true);
+
+                        // 高亮顯示對應的地圖區域
+                        if (highlightLayer) {
+                            map.removeLayer(highlightLayer);
+                        }
+                        highlightLayer = L.geoJSON(geojsonData, {
+                            style: function(feature) {
+                                if (feature.properties.TOWNNAME === d.id) {
+                                    return { color: "#ff0", weight: 3, fillOpacity: 0.7 };
+                                } else {
+                                    return { color: "#3388ff", weight: 1, fillOpacity: 0.2 };
+                                }
+                            }
+                        }).addTo(map);
+
+                        // 更新饼图
+                        updatePieChart(d.id);
                     })
                     .on("mouseout", function(d) {
-                        tooltip.transition()
-                            .duration(500)
-                            .style("opacity", 0);
+                        d3.select(this).classed("highlight", false);
+
+                        // 移除地圖區域高亮
+                        if (highlightLayer) {
+                            map.removeLayer(highlightLayer);
+                        }
                     });
 
                 node.append("title")
@@ -311,6 +395,98 @@
 
         // 調用生成力導向圖
         generateForceDirectedGraph();
+
+        // 設置甜甜圈圖
+        const pieWidth = 250;
+        const pieHeight = 250;
+        const radius = Math.min(pieWidth, pieHeight) / 2;
+
+        // 選擇甜甜圈圖容器並設置SVG
+        const pieSvg = d3.select(".pie-chart")
+            .append("svg")
+            .attr("width", pieWidth)
+            .attr("height", pieHeight)
+            .append("g")
+            .attr("transform", `translate(${pieWidth / 2}, ${pieHeight / 2})`);
+
+        // 設置甜甜圈圖顏色標度
+        const pieColor = d3.scaleOrdinal(d3.schemeCategory10);
+
+        // 模擬甜甜圈圖數據
+        const initialPieData = {
+            "萬華區": 747563,
+            "其他地區": 2000000 // 假設數據，請替換為真實數據
+        };
+
+        function updatePieChart(region) {
+            d3.csv("matrix.csv").then(matrixData => {
+                const pieData = {};
+                const totalValue = matrixData.reduce((acc, row) => {
+                    if (row[''] !== region) {
+                        pieData[row['']] = +row[region] || 0;
+                        return acc + (+row[region] || 0);
+                    }
+                    return acc;
+                }, 0);
+
+                pieData[region] = totalValue;
+
+                const pie = d3.pie()
+                    .value(d => d[1])
+                    .sort(null);
+
+                const arc = d3.arc()
+                    .innerRadius(radius * 0.6)
+                    .outerRadius(radius);
+
+                const labelArc = d3.arc()
+                    .innerRadius(radius * 0.8)
+                    .outerRadius(radius * 0.8);
+
+                const pieDataReady = pie(Object.entries(pieData));
+
+                const piePath = pieSvg.selectAll("path")
+                    .data(pieDataReady);
+
+                piePath.enter()
+                    .append("path")
+                    .merge(piePath)
+                    .attr("d", arc)
+                    .attr("fill", d => pieColor(d.data[0]))
+                    .attr("stroke", "white")
+                    .style("stroke-width", "2px")
+                    .on("mouseover", function(event, d) {
+                        d3.select(this).classed("highlight", true);
+                        centerText.text(`${d.data[0]}: ${d.data[1]}`);
+                    })
+                    .on("mouseout", function(event, d) {
+                        d3.select(this).classed("highlight", false);
+                        centerText.text(`${region}: ${pieData[region]}`);
+                    })
+                    .transition()
+                    .duration(1000)
+                    .attrTween("d", function(d) {
+                        const i = d3.interpolate({ startAngle: 0, endAngle: 0 }, d);
+                        return function(t) { return arc(i(t)); };
+                    });
+
+                piePath.exit().remove();
+
+                const centerText = pieSvg.selectAll(".center-text")
+                    .data([pieData[region]]);
+
+                centerText.enter()
+                    .append("text")
+                    .style("font-size", "15px")
+                    .attr("class", "center-text")
+                    .attr("dy", "0.35em")
+                    .merge(centerText)
+                    .text(`${region}: ${pieData[region]}`);
+            });
+        }
+
+        updatePieChart("萬華區");
+
     </script>
 </body>
 </html>

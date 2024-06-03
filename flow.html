@@ -54,8 +54,8 @@
         }
 
         .highlight {
-            stroke: #ff0;
-            stroke-width: 3px;
+            stroke: rgb(21, 25, 255);
+            stroke-width: 1px;
             stroke-opacity: 1;
         }
 
@@ -69,7 +69,6 @@
             font-size: 24px;
             font-family: Arial, sans-serif;
             text-anchor: middle;
-            dominant-baseline: middle;
         }
 
         .highlight {
@@ -119,10 +118,17 @@
             geojsonData = data;
             L.geoJSON(geojsonData, {
                 onEachFeature: function (feature, layer) {
+                    layer.setStyle({
+                        weight: 1,
+                            color: '#3388ff',
+                            dashArray: '',
+                            fillOpacity: 0.2
+                    });
+                    
                     layer.on('mouseover', function () {
                         layer.setStyle({
-                            weight: 3,
-                            color: '#ff0',
+                            weight: 1,
+                            color: 'rgb(21, 25, 255)',
                             dashArray: '',
                             fillOpacity: 0.7
                         });
@@ -224,7 +230,7 @@
                         highlightLayer = L.geoJSON(geojsonData, {
                             style: function(feature) {
                                 if (feature.properties.TOWNNAME === d.id) {
-                                    return { color: "#ff0", weight: 3, fillOpacity: 0.7 };
+                                    return { color: "#ffF", weight: 1, fillOpacity: 0.7 };
                                 } else {
                                     return { color: "#3388ff", weight: 1, fillOpacity: 0.2 };
                                 }
@@ -343,7 +349,7 @@
                         highlightLayer = L.geoJSON(geojsonData, {
                             style: function(feature) {
                                 if (feature.properties.TOWNNAME === d.id) {
-                                    return { color: "#ff0", weight: 3, fillOpacity: 0.7 };
+                                    return { color: "rgb(21, 25, 255)", weight: 1, fillOpacity: 0.7 };
                                 } else {
                                     return { color: "#3388ff", weight: 1, fillOpacity: 0.2 };
                                 }

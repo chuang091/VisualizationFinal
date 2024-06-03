@@ -3,264 +3,227 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Force-Directed Graph with Leaflet and D3 Dashboard</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <title>Force-Directed Graph</title>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script src="https://d3js.org/d3-scale-chromatic.v1.min.js"></script>
     <style>
-        body, html {
-            height: 100%;
-            width: 100%;
-            margin: 0;
-            display: flex;
-            flex-direction: row;
-        }
-
-        #map {
-            width: 50%;
-            height: 100%;
-        }
-
-        #dashboard {
-            width: 50%;
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-        }
-
-        #graph {
-            width: 100%;
-            height: 50%;
-            position: relative;
-        }
-
-        #other {
-            width: 100%;
-            height: 50%;
-            background-color: #f0f0f0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
         .link {
             stroke-opacity: 0.6;
         }
-
         .node text {
             pointer-events: none;
             font-size: 10px;
         }
-
-        .highlight {
-            stroke: #ff0;
-            stroke-width: 3px;
-            stroke-opacity: 1;
-        }
-
-        .label {
-            font-size: 12px;
-            font-family: Arial, sans-serif;
-            text-anchor: middle;
-        }
-
-        .center-text {
-            font-size: 24px;
-            font-family: Arial, sans-serif;
-            text-anchor: middle;
-            dominant-baseline: middle;
-        }
-
-        .highlight {
-            opacity: 0.8;
+        .tooltip {
+            position: absolute;
+            text-align: center;
+            padding: 8px;
+            font: 12px sans-serif;
+            background: lightsteelblue;
+            border: 0;
+            border-radius: 8px;
+            pointer-events: none;
         }
     </style>
 </head>
 <body>
-    <div id="map"></div>
-    <div id="dashboard">
-        <div id="graph">
-            <svg width="100%" height="100%"></svg>
-        </div>
-        <div id="other">
-            <div class="pie-chart"></div>
-        </div>
-        
-    </div>
+    <svg width="960" height="600"></svg>
+    <div class="tooltip" style="opacity: 0;"></div>
     <script>
-        let geojsonData;
-        let highlightLayer;
+        const width = 960;
+        const height = 600;
+        // 饼图额外半径比率
+        const pieExtraRadius = 1.4;
 
-        // 設置地圖
-        const map = L.map('map').setView([25.0630, 121.5614], 12);
-
-        // 添加輕量風格的底圖
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-            maxZoom: 19
-        }).addTo(map);
-
-        // 設置SVG圖層
-        const svgLayer = L.svg().addTo(map);
-        const svg = d3.select("#map").select("svg");
-        const g = svg.append("g").attr("class", "leaflet-zoom-hide");
-        
+        // 設置SVG和tooltip
+        const svg = d3.select("svg");
+        const tooltip = d3.select(".tooltip");
 
         // 定義顏色標度
         const tableauColors = d3.schemeTableau10; // T10种颜色
         const set3Colors = d3.schemeSet3; // 9种颜色
+
         const combinedColors = [...tableauColors, ...set3Colors]; // 将两个颜色数组合并，得到19种颜色
         const color = d3.scaleOrdinal(combinedColors); // 创建序数比例尺
 
-
-        // 添加台北市的GeoJSON
-        d3.json("taipei.geojson").then(data => {
-            geojsonData = data;
-            L.geoJSON(geojsonData, {
-                onEachFeature: function (feature, layer) {
-                    layer.on('mouseover', function () {
-                        layer.setStyle({
-                            weight: 3,
-                            color: '#ff0',
-                            dashArray: '',
-                            fillOpacity: 0.7
-                        });
-
-                        // 在控制台記錄TOWNNAME
-                        console.log(feature.properties.TOWNNAME);
-
-                        // 高亮顯示對應的節點
-                        d3.selectAll(".node")
-                            .filter(d => d.id === feature.properties.TOWNNAME)
-                            .attr("stroke", "#ff0")
-                            .attr("stroke-width", 3);
-
-                        // 更新饼图
-                        updatePieChart(feature.properties.TOWNNAME);
-                    });
-                    layer.on('mouseout', function () {
-                        layer.setStyle({
-                            weight: 1,
-                            color: '#3388ff',
-                            dashArray: '',
-                            fillOpacity: 0.2
-                        });
-
-                        // 移除高亮顯示
-                        d3.selectAll(".node")
-                            .filter(d => d.id === feature.properties.TOWNNAME)
-                            .attr("stroke", null)
-                            .attr("stroke-width", null);
-                    });
-                    layer.bindPopup('<strong>' + feature.properties.TOWNNAME + '</strong>');
-                }
-            }).addTo(map);
-        });
-
         // 讀取CSV文件並生成圖表
-        d3.csv("matrix.csv").then(matrixData => {
-            d3.csv("district_centroids.csv").then(centroidData => {
-                const nodes = [];
-                const links = [];
-                const districtSet = new Set();
-                const header = matrixData.columns.slice(1);
+        d3.csv("matrix.csv").then(data => {
+            const nodes = [];
+            const links = [];
+            const districtSet = new Set();
+            const header = data.columns.slice(1);
 
-                // 將行列轉換為節點和連接數據
-                matrixData.forEach(row => {
-                    const source = row[''];
-                    const sourceCentroid = centroidData.find(d => d.TOWNNAME === source);
-                    if (sourceCentroid && !districtSet.has(source)) {
-                        nodes.push({ id: source, value: +row[source], lat: +sourceCentroid.lat, lon: +sourceCentroid.lon, linkData: [] });
-                        districtSet.add(source);
+            data.forEach(row => {
+                const source = row[''];
+                if (!districtSet.has(source)) {
+                    nodes.push({ id: source, value: +row[source], linkData: [] });
+                    districtSet.add(source);
+                }
+                header.forEach(target => {
+                    const value = +row[target];
+                    if (source !== target && value > 0) {
+                        links.push({ source: source, target: target, value: value });
+                        nodes.find(n => n.id === source).linkData.push({ target: target, value: value });
                     }
-                    header.forEach(target => {
-                        const value = +row[target];
-                        const targetCentroid = centroidData.find(d => d.TOWNNAME === target);
-                        if (source !== target && value > 0 && targetCentroid) {
-                            links.push({ source: source, target: target, value: value, 
-                                         sourceLat: +sourceCentroid.lat, sourceLon: +sourceCentroid.lon,
-                                         targetLat: +targetCentroid.lat, targetLon: +targetCentroid.lon });
-                            nodes.find(n => n.id === source).linkData.push({ target: target, value: value });   
-                        }
-                    });
+                });
+            });
+
+            // 歸一化連接值以設置顏色
+            const linkValues = links.map(d => d.value);
+            const maxLinkValue = Math.max(...linkValues);
+            const minLinkValue = Math.min(...linkValues);
+
+            const pie = d3.pie().value(d => d.value);
+            const arc = d3.arc();
+
+
+            const infernoScale = d3.scaleSequential(d3.interpolateInferno)
+                .domain([minLinkValue, maxLinkValue]);
+
+            const simulation = d3.forceSimulation(nodes)
+                .force("link", d3.forceLink(links).id(d => d.id).distance(100))
+                .force("charge", d3.forceManyBody().strength(-500))
+                .force("center", d3.forceCenter(width / 2, height / 2));
+
+            const link = svg.append("g")
+                .attr("class", "links")
+                .selectAll("line")
+                .data(links)
+                .enter().append("line")
+                .attr("stroke-width", d => Math.sqrt(d.value)/200)
+                .attr("stroke", d => infernoScale(d.value))
+                .attr("stroke-opacity", 0.6)
+                .on("mouseover", function(event, d) {
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", .9);
+                    tooltip.html("From: " + d.source.id + "<br/>To: " + d.target.id + "<br/>Value: " + d.value)
+                        .style("left", (event.pageX) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                })
+                .on("mouseout", function(d) {
+                    tooltip.transition()
+                        .duration(500)
+                        .style("opacity", 0);
                 });
 
-                // 歸一化連接值以設置顏色
-                const linkValues = links.map(d => d.value);
-                const maxLinkValue = Math.max(...linkValues);
-                const minLinkValue = Math.min(...linkValues);
+            const node = svg.append("g")
+                .attr("class", "nodes")
+                .selectAll("circle")
+                .data(nodes)
+                .enter().append("circle")
+                .attr("r", d => Math.sqrt(d.value) / 100)
+                .attr("fill", d => color(d.id))
+                .call(d3.drag()
+                    .on("start", dragstarted)
+                    .on("drag", dragged)
+                    .on("end", dragended))
+                .on("mouseover", function(event, d) {
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", .9);
+                    tooltip.html(d.id + "<br/>" + "Value: " + d.value)
+                        .style("left", (event.pageX) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                })
+                .on("mouseout", function(d) {
+                    tooltip.transition()
+                        .duration(500)
+                        .style("opacity", 0);
+                });
 
-                const infernoScale = d3.scaleSequential(d3.interpolateInferno)
-                    .domain([minLinkValue, maxLinkValue]);
+        const pieGroups = svg.selectAll(".pieGroup")
+            .data(nodes)
+            .enter().append("g")
+            .attr("class", "pieGroup");
 
-                const link = g.selectAll("line")
-                    .data(links)
-                    .enter().append("line")
-                    .attr("class", "link")
-                    .attr("stroke-width", d => Math.sqrt(d.value) / 200)
-                    .attr("stroke", d => infernoScale(d.value))
-                    .attr("stroke-opacity", 0.6)
-                    .on("mouseover", function(event, d) {
-                        d3.select(this).classed("highlight", true);
-                    })
-                    .on("mouseout", function(d) {
-                        d3.select(this).classed("highlight", false);
-                    });
+        function ticked() {
+            node.attr("cx", d => d.x)
+                .attr("cy", d => d.y);
 
-                const node = g.selectAll("circle")
-                    .data(nodes)
-                    .enter().append("circle")
-                    .attr("class", "node")
-                    .attr("r", d => Math.sqrt(d.value) / 100)
-                    .attr("fill", d => color(d.id))
-                    .on("mouseover", function(event, d) {
-                        d3.select(this).classed("highlight", true);
+            link.attr("x1", d => d.source.x)
+                .attr("y1", d => d.source.y)
+                .attr("x2", d => d.target.x)
+                .attr("y2", d => d.target.y);
 
-                        // 高亮顯示對應的地圖區域
-                        if (highlightLayer) {
-                            map.removeLayer(highlightLayer);
-                        }
-                        highlightLayer = L.geoJSON(geojsonData, {
-                            style: function(feature) {
-                                if (feature.properties.TOWNNAME === d.id) {
-                                    return { color: "#ff0", weight: 3, fillOpacity: 0.7 };
-                                } else {
-                                    return { color: "#3388ff", weight: 1, fillOpacity: 0.2 };
-                                }
-                            }
-                        }).addTo(map);
+            pieGroups.attr("transform", d => `translate(${d.x}, ${d.y})`)
+                .each(drawPie);
+        }
 
-                        // 更新饼图
-                        updatePieChart(d.id);
-                    })
-                    .on("mouseout", function(d) {
-                        d3.select(this).classed("highlight", false);
+        function drawPie(nodeData) {
+            const pieData = pie(nodeData.linkData);
+            const nodeRadius = Math.sqrt(nodeData.value) / 100;
+            const g = d3.select(this);
+            const path = g.selectAll("path")
+                .data(pieData);
 
-                        // 移除地圖區域高亮
-                        if (highlightLayer) {
-                            map.removeLayer(highlightLayer);
-                        }
-                    });
+            path.enter().append("path")
+                .merge(path)
+                .attr("d", arc.innerRadius(nodeRadius).outerRadius(nodeRadius*pieExtraRadius))
+                .attr("fill", d => color(d.data.target));
 
-                // 更新位置
-                function update() {
-                    link.attr("x1", d => map.latLngToLayerPoint([d.sourceLat, d.sourceLon]).x)
-                        .attr("y1", d => map.latLngToLayerPoint([d.sourceLat, d.sourceLon]).y)
-                        .attr("x2", d => map.latLngToLayerPoint([d.targetLat, d.targetLon]).x)
-                        .attr("y2", d => map.latLngToLayerPoint([d.targetLat, d.targetLon]).y);
+            path.exit().remove();
+        }
 
-                    node.attr("cx", d => map.latLngToLayerPoint([d.lat, d.lon]).x)
-                        .attr("cy", d => map.latLngToLayerPoint([d.lat, d.lon]).y);
-                }
+        node.on("dblclick", function(event, d) {
+            if (d3.select(this).classed("focused")) {
+                // 如果节点已经聚焦，恢复显示所有节点和边
+                node.style("opacity", 1);
+                link.style("opacity", 1);
+                node.classed("focused", false);
+            } else{
+                const connectedNodes = new Set();
+                connectedNodes.add(d.id); // 添加自身
+                d3.select(this).classed("focused", true);
 
-                map.on("moveend", update);
-                update();
-            }).catch(error => {
-                console.error("Error loading or parsing centroid data:", error);
-            });
+                links.forEach(link => {
+                    if (link.source.id === d.id) {
+                        connectedNodes.add(link.target.id);
+                        console.log(link);
+                    }
+                    if (link.target.id === d.id) {
+                        connectedNodes.add(link.source.id);
+                        console.log(link);
+                    }
+                });
+                console.log(connectedNodes);
+                // 更新节点和边的显示状态
+                node.style("opacity", node => connectedNodes.has(node.id) ? 1 : 0);
+                // 只保留与d直接相连的边
+                link.style("opacity", link => link.source.id === d.id || link.target.id === d.id ? 1 : 0);
+
+                // 更新饼图的显示状态
+                pieGroups.style("opacity", pieGroup => connectedNodes.has(pieGroup.id) ? 1 : 0);
+        }});
+            node.append("title")
+                .text(d => d.id);
+
+            simulation
+                .nodes(nodes)
+                .on("tick", ticked);
+
+            simulation.force("link")
+                .links(links);
+
+
+            function dragstarted(event, d) {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                d.fx = d.x;
+                d.fy = d.y;
+            }
+
+            function dragged(event, d) {
+                d.fx = event.x;
+                d.fy = event.y;
+            }
+
+            function dragended(event, d) {
+                if (!event.active) simulation.alphaTarget(0);
+                d.fx = null;
+                d.fy = null;
+            }
         }).catch(error => {
-            console.error("Error loading or parsing matrix data:", error);
+            console.error("Error loading or parsing data:", error);
         });
 
         // 生成力導向圖
@@ -417,6 +380,7 @@
                         // 如果节点已经聚焦，恢复显示所有节点和边
                         node.style("opacity", 1);
                         link.style("opacity", 1);
+                        pieGroups.style("opacity", 1);
                         node.classed("focused", false);
                     } else{
                         const connectedNodes = new Set();

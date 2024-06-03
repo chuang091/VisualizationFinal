@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Map and Histogram Visualization with D3 and Leaflet</title>
+    <script src="https://d3js.org/d3.v6.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.6.0/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.6.0/dist/leaflet.css"/>
+    <style>
+        body, html { 
+            height: 100%; 
+            margin: 0; 
+        }
+        #map { 
+            width: 70%; 
+            height: 100%; 
+            float: left; 
+            background: white; 
+        }
+        #histogram { 
+            width: 30%; 
+            height: 100%; 
+            float: right; 
+        }
+        #controls { 
+            margin: 20px; 
+            position: absolute; 
+            z-index: 1000; 
+            background: rgba(255, 255, 255, 0.8); 
+            padding: 10px; 
+            border-radius: 5px; 
+        }
+        svg { 
+            height: 100%; 
+            width: 100%; 
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            color: #fff;
+            background-color: #007BFF;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <label for="frequencySlider">Minimum Frequency: <span id="frequencyLabel"></span></label>
+        <input type="range" id="frequencySlider" min="100" max="2000" value="100" step="10">
+        <button id="loadNewDataset">20mins</button>
+        <button id="loadOriginalDataset">20~60mins</button>
+    </div>
+    <div id="map"></div>
+    <div id="histogram"></div>
+    <script>
+        var map = L.map('map', { preferCanvas: true }).setView([25.08, 121.52], 12);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+        var histogramSvg = d3.select("#histogram").append("svg");
+        var maxValues = {
+            'cleaned_data.csv': 1000,
+            '20_data.csv': 5000
+        };
+
+        document.getElementById('loadNewDataset').addEventListener('click', function () {
+            loadData('20_data.csv');
+        });
+
+        document.getElementById('loadOriginalDataset').addEventListener('click', function () {
+            loadData('cleaned_data.csv');
+        });
+
+        document.getElementById('frequencySlider').addEventListener('input', function () {
+            updateVisualizations(currentData,filename);
+        });
+        let filename = 'cleaned_data.csv'
+        loadData('cleaned_data.csv'); // Load original dataset by default
+
+        function loadData(filename2) {
+            d3.csv(filename2).then(function (data) {
+                filename = filename2
+                currentData = data;
+                updateVisualizations(data,filename2);
+            });
+        }
+
+        function updateVisualizations(data,filename) {
+            var threshold = document.getElementById('frequencySlider').value;
+            var filteredData = data.filter(d => +d.Frequency >= threshold);
+            var maxFrequency = maxValues[filename];
+            var colorScale = d3.scaleSequential(d3.interpolateInferno).domain([0, maxFrequency]);
+            var opacityScale = d3.scaleLinear().domain([100, maxFrequency]).range([0.2, 1]);
+
+            updateHistogram(filteredData, colorScale, opacityScale, maxFrequency);
+            updateMapLines(filteredData, colorScale, opacityScale);
+        }
+
+        function updateHistogram(data, colorScale, opacityScale, maxFrequency) {
+            histogramSvg.selectAll("*").remove();
+            var xScale = d3.scaleLinear().domain([100, maxFrequency]).range([40, document.getElementById('histogram').clientWidth - 18]);
+            var bins = d3.histogram().domain(xScale.domain()).thresholds(xScale.ticks(20))(data.map(d => +d.Frequency));
+            var yScale = d3.scaleLinear().domain([0, d3.max(bins, d => d.length)]).range([document.getElementById('histogram').clientHeight - 40, 20]);
+
+            var xAxis = d3.axisBottom(xScale).ticks(5);
+            var yAxis = d3.axisLeft(yScale).ticks(5);
+            histogramSvg.append("g").attr("transform", "translate(0," + (document.getElementById('histogram').clientHeight - 40) + ")").call(xAxis);
+            histogramSvg.append("g").attr("transform", "translate(40,0)").call(yAxis);
+
+            histogramSvg.selectAll("rect").data(bins).enter().append("rect")
+                .attr("x", d => xScale(d.x0))
+                .attr("y", d => yScale(d.length))
+                .attr("width", d => Math.max(0, xScale(d.x1) - xScale(d.x0) - 1))
+                .attr("height", d => yScale(0) - yScale(d.length))
+                .attr("fill", d => colorScale(d.x0))
+                .attr("stroke", "#fff")
+                .attr("stroke-width", 2)
+                .on("mouseover", function(event, d) {
+                    d3.select(this).attr("fill", "red");
+                    updateMapLines(data.filter(x => x.Frequency >= d.x0 && x.Frequency < d.x1), colorScale, opacityScale); // Highlight map data
+                })
+                .on("mouseout", function(event, d) {
+                    d3.select(this).attr("fill", colorScale(d.x0));
+                    updateMapLines(data, colorScale, opacityScale); // Reset map data
+                });
+        }
+
+        function updateMapLines(data, colorScale, opacityScale) {
+            map.eachLayer(function (layer) {
+                if (layer instanceof L.Polyline) {
+                    map.removeLayer(layer);
+                }
+            });
+            data.sort((a, b) => a.Frequency - b.Frequency);
+            data.forEach(function (d) {
+                var latlngs = [
+                    [d.Station1_lat, d.Station1_lon],
+                    [d.Station2_lat, d.Station2_lon]
+                ];
+                var polyline = L.polyline(latlngs, {
+                    color: colorScale(d.Frequency),
+                    weight: 5,
+                    opacity: opacityScale(d.Frequency)
+                }).addTo(map);
+                polyline.bindPopup(`站點1: ${d.Station1} <br> 站點2: ${d.Station2} <br> 頻率: ${d.Frequency}`);
+            });
+        }
+    </script>
+</body>
+
+</html>

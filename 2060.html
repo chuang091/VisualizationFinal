@@ -51,6 +51,8 @@
 </head>
 <body>
     <div id="controls">
+        <label for="metroLayer">顯示 Metro 圖層</label>
+        <input type="checkbox" id="metroLayer">
         <label for="frequencySlider">Minimum Frequency: <span id="frequencyLabel"></span></label>
         <input type="range" id="frequencySlider" min="100" max="2000" value="100" step="10">
         <button id="loadNewDataset">20mins</button>
@@ -78,12 +80,31 @@
         document.getElementById('frequencySlider').addEventListener('input', function () {
             updateVisualizations(currentData,filename);
         });
-        let filename = 'cleaned_data.csv'
+        let filename = 'cleaned_data.csv';
         loadData('cleaned_data.csv'); // Load original dataset by default
+
+        // Checkbox for adding/removing metro geoJSON layer
+        var metroLayer;
+        document.getElementById('metroLayer').addEventListener('change', function() {
+            if (this.checked) {
+                if (!metroLayer) {
+                    metroLayer = L.geoJSON().addTo(map);
+                    fetch('metro.geojson').then(function(resp) { return resp.json(); }).then(function(data) {
+                        metroLayer.addData(data);
+                    });
+                } else {
+                    metroLayer.addTo(map);
+                }
+            } else {
+                if (metroLayer) {
+                    map.removeLayer(metroLayer);
+                }
+            }
+        });
 
         function loadData(filename2) {
             d3.csv(filename2).then(function (data) {
-                filename = filename2
+                filename = filename2;
                 currentData = data;
                 updateVisualizations(data,filename2);
             });
@@ -151,5 +172,4 @@
         }
     </script>
 </body>
-
 </html>

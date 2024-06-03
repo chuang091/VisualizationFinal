@@ -170,6 +170,7 @@
                 // 如果节点已经聚焦，恢复显示所有节点和边
                 node.style("opacity", 1);
                 link.style("opacity", 1);
+                pieGroups.style("opacity", 1);
                 node.classed("focused", false);
             } else{
                 const connectedNodes = new Set();

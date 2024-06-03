@@ -297,7 +297,7 @@
                 const minLinkValue = Math.min(...linkValues);
                 const pieExtraRadius = 1.4;
                 const Radius = function(d) {
-                    return Math.sqrt(d) / 100;
+                    return Math.sqrt(d) / 75;
                 };
 
                 const infernoScale = d3.scaleSequential(d3.interpolateInferno)
@@ -373,7 +373,6 @@
 
                 simulation.force("link")
                     .links(links)
-                    .distance(100);
 
                 const pie = d3.pie().value(d => d.value);
                 const arc = d3.arc();

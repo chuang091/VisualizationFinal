@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>D3.js Interactive Chart</title>
+    <script src="https://d3js.org/d3.v6.min.js"></script>
+    <style>
+        .line {
+            fill: none;
+            stroke-width:4px;
+        }
+        .line_default {
+            fill: none;
+            stroke-width: 4px;
+        }
+        .button-container {
+            margin: 20px 0;
+        }
+        .tooltip_axis_text{
+            font-size:10px;
+            text-anchor:middle;
+            opacity: 0;
+        }
+        button {
+        background-color: #499f4b; 
+        color: white; 
+        padding: 13px 25px; 
+        text-align: center; 
+        text-decoration: none;
+        display: inline-block;
+        font-size: 16px;
+        margin: 4px 2px;
+        cursor: pointer;
+        border: none; 
+        border-radius: 5px; 
+        transition: all 0.3s;
+        }
+        button:hover {
+        background-color: #3e8e41; 
+        }
+    </style>
+</head>
+<body>
+
+<div class="button-container">
+    <button id="supply-button">Show Supply</button>
+    <button id="stations-button">Show Stations</button>
+    <button id="raindays-button">Show Rainy Days</button>
+</div>
+
+<svg width="960" height="500"></svg>
+
+<script>
+    const data = [
+    {"date":"202004","rainyDays":15,"bikeUsage":160583,"supply":2485,"stations":100},
+    {"date":"202005","rainyDays":15,"bikeUsage":167209,"supply":2485,"stations":100},
+    {"date":"202006","rainyDays":8,"bikeUsage":198897,"supply":2485,"stations":100},
+    {"date":"202007","rainyDays":9,"bikeUsage":215174,"supply":2485,"stations":100},
+    {"date":"202008","rainyDays":13,"bikeUsage":204543,"supply":2485,"stations":100},
+    {"date":"202009","rainyDays":15,"bikeUsage":251591,"supply":2485,"stations":100},
+    {"date":"202010","rainyDays":11,"bikeUsage":227858,"supply":2485,"stations":100},
+    {"date":"202011","rainyDays":10,"bikeUsage":232847,"supply":2485,"stations":100},
+    {"date":"202012","rainyDays":24,"bikeUsage":220527,"supply":2485,"stations":100},
+    {"date":"202101","rainyDays":10,"bikeUsage":187821,"supply":2485,"stations":100},
+    {"date":"202102","rainyDays":7,"bikeUsage":153276,"supply":2485,"stations":100},
+    {"date":"202103","rainyDays":8,"bikeUsage":264545,"supply":2485,"stations":100},
+    {"date":"202104","rainyDays":4,"bikeUsage":251193,"supply":2485,"stations":100},
+    {"date":"202105","rainyDays":6,"bikeUsage":269975,"supply":7370,"stations":292},
+    {"date":"202106","rainyDays":10,"bikeUsage":236110,"supply":9825,"stations":377},
+    {"date":"202107","rainyDays":13,"bikeUsage":373416,"supply":12419,"stations":480},
+    {"date":"202108","rainyDays":17,"bikeUsage":601959,"supply":14613,"stations":564},
+    {"date":"202109","rainyDays":8,"bikeUsage":906934,"supply":16771,"stations":641},
+    {"date":"202110","rainyDays":12,"bikeUsage":1175422,"supply":18276,"stations":708},
+    {"date":"202111","rainyDays":12,"bikeUsage":1424950,"supply":20375,"stations":788},
+    {"date":"202112","rainyDays":9,"bikeUsage":1429135,"supply":21281,"stations":833},
+    {"date":"202201","rainyDays":13,"bikeUsage":1371395,"supply":22494,"stations":897},
+    {"date":"202202","rainyDays":21,"bikeUsage":1047153,"supply":22965,"stations":918},
+    {"date":"202203","rainyDays":11,"bikeUsage":2021983,"supply":24515,"stations":991},
+    {"date":"202204","rainyDays":7,"bikeUsage":1987820,"supply":25670,"stations":1043},
+    {"date":"202205","rainyDays":20,"bikeUsage":1599400,"supply":26193,"stations":1074},
+    {"date":"202206","rainyDays":15,"bikeUsage":2030794,"supply":26480,"stations":1090},
+    {"date":"202207","rainyDays":10,"bikeUsage":2660347,"supply":27078,"stations":1115},
+    {"date":"202208","rainyDays":10,"bikeUsage":2890765,"supply":27568,"stations":1141},
+    {"date":"202209","rainyDays":15,"bikeUsage":2632276,"supply":28189,"stations":1172},
+    {"date":"202210","rainyDays":20,"bikeUsage":2430187,"supply":28788,"stations":1206},
+    {"date":"202211","rainyDays":5,"bikeUsage":3019656,"supply":29110,"stations":1225},
+    {"date":"202212","rainyDays":18,"bikeUsage":2628740,"supply":29312,"stations":1235},
+    {"date":"202301","rainyDays":10,"bikeUsage":2686167,"supply":29369,"stations":1239},
+    {"date":"202302","rainyDays":7,"bikeUsage":2837717,"supply":29508,"stations":1247},
+    {"date":"202303","rainyDays":7,"bikeUsage":3774370,"supply":29940,"stations":1274},
+    {"date":"202304","rainyDays":9,"bikeUsage":3365049,"supply":30002,"stations":1278},
+    {"date":"202305","rainyDays":13,"bikeUsage":3641896,"supply":30050,"stations":1280},
+    {"date":"202306","rainyDays":13,"bikeUsage":3362023,"supply":30158,"stations":1286},
+    {"date":"202307","rainyDays":13,"bikeUsage":3055147,"supply":30273,"stations":1293},
+    {"date":"202308","rainyDays":16,"bikeUsage":2722839,"supply":30530,"stations":1309},
+    {"date":"202309","rainyDays":12,"bikeUsage":2863438,"supply":30693,"stations":1317},
+    {"date":"202310","rainyDays":10,"bikeUsage":2843257,"supply":30693,"stations":1317},
+    {"date":"202311","rainyDays":8,"bikeUsage":2941065,"supply":30693,"stations":1317}
+]
+
+    // 设置画布的尺寸和边距
+    const margin = {top: 20, right: 80, bottom: 30, left: 80},
+        width = 960 - margin.left - margin.right,
+        height = 500 - margin.top - margin.bottom;
+
+    const svg = d3.select("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+            .append("g")
+            .attr("transform", `translate(${margin.left},${margin.top})`);
+    // 解析时间格式
+    const parseDate = d3.timeParse("%Y%m");
+    const formatDate=d3.timeFormat("%Y/%m");
+    data.forEach(d => {
+            d.date = parseDate(d.date);
+        });
+    // 设置 x 和 y 比例尺
+    const x = d3.scaleTime().domain(d3.extent(data, d => d.date)).range([0, width]);
+    const yBikeUsage = d3.scaleLinear().domain([0, d3.max(data, d => d.bikeUsage)]).range([height, 0]);
+    const ySupply = d3.scaleLinear().domain([0, d3.max(data, d => d.supply)]).range([height, 0]);
+    const yRainyDays=d3.scaleLinear().domain([0, d3.max(data, d => d.rainyDays)]).range([0,height]);
+    const yStations=d3.scaleLinear().domain([0, d3.max(data, d => d.stations)]).range([height,0]);
+    
+    const color=['#ccebc5', '#decbe4', '#fed9a6',"#53cae8"]
+
+    // 定义线条生成器
+    const lineBikeUsage = d3.line()
+        .x(d => x(d.date))
+        .y(d => yBikeUsage(d.bikeUsage));
+
+    const lineSupply = d3.line()
+        .x(d => x(d.date))
+        .y(d => ySupply(d.supply));
+    const lineStations=d3.line()
+        .x(d=>x(d.date))
+        .y(d=>yStations(d.stations))
+    // 添加 X 轴
+    svg.append("g")
+        .attr("class", "x axis")
+        .attr("transform", `translate(0,${height})`)
+        .call(d3.axisBottom(x).tickFormat(d3.timeFormat("%Y/%m")));
+
+    svg.append("text")
+        .attr("x", width / 2)
+        .attr("y", height+margin.bottom)
+        .style("text-anchor", "middle")
+        .text("Date");
+
+    // 添加 Y 轴
+    svg.append("g")
+        .call(d3.axisLeft(yBikeUsage).tickFormat(d3.format(".2s")))
+
+    svg.append("text")
+        .attr("transform", "rotate(-90)")
+        .attr("y", 15 - margin.left)
+        .attr("x", 10 - (height / 2))
+        .attr("dy", "1em")
+        .style("text-anchor", "middle")
+        .text("bikeUsage");
+    
+    // 默认绘制 bikeUsage 折线图
+    const path_BikeUsage=svg.append("path")
+        .datum(data)
+        .attr("class", "line_default")
+        .attr("id", "bikeUsageLine")
+        .attr("stroke", color[2])
+        .attr("d", lineBikeUsage)
+    const radius=5;
+    svg.selectAll(".circle")  
+        .data(data)  
+        .enter()  
+        .append("circle")  
+        .attr("class", "circle")  
+        .attr("cx", d => x(d.date))  
+        .attr("cy", d => yBikeUsage(d.bikeUsage))  
+        .attr("r", radius)  
+        .style("fill", color[2])
+        .style("stroke", "white")
+        .style("stroke-width", "1px")
+        .style("opacity", 0) 
+        .transition() 
+        .delay((d, i) => i * 40)
+        .duration(1000) 
+        .attr("r", radius)
+        .style("opacity", 1);
+    line_animation(path_BikeUsage)
+    function line_animation(path){
+        var totalLength = path.node().getTotalLength();
+        path
+            .attr("stroke-dasharray", `${totalLength} ${totalLength}`)
+            .attr("stroke-dashoffset", totalLength)
+            .transition()
+            .duration(1600)
+            .ease(d3.easeLinear)
+            .attr("stroke-dashoffset", 0);
+    }
+
+    const line_opacity=0.5;
+    const rect_opacity=0.5;
+    // 添加一个用于显示提示信息的 div 元素
+    const tooltip = d3.select("body").append("div")
+        .attr("class", "tooltip")
+        .style("opacity", 0);
+
+    // 在 SVG 中添加用于跟踪鼠标位置的竖线
+    const verticalLine = svg.append("line")
+        .attr("class", "vertical-line")
+        .style("stroke", "black")
+        .style("stroke-width", 1)
+        .style("stroke-dasharray", "3, 3")
+        .style("opacity", 0);
+
+    // 在 SVG 中添加用于跟踪鼠标位置的横线
+    const horizontalLine = svg.append("line")
+        .attr("class", "horizontal-line")
+        .style("stroke", "black")
+        .style("stroke-width", 1)
+        .style("stroke-dasharray", "3, 3")
+        .style("opacity", 0);
+
+    // 在 SVG 中添加用于显示提示框的矩形
+    const tooltipRect = svg.append("rect")
+        .attr("class", "tooltip-rect")
+        .attr("width", 140)
+        .attr("height", 60)
+        .attr("rx",10)
+        .attr("ry",10)
+        .style("fill", "white")
+        .style("stroke", "black")
+        .style("stroke-width", 1)
+        .style("opacity", 0);
+
+    // 在 SVG 中添加用于显示提示信息的文本
+    const tooltipText = svg.append("text")
+        .attr("class", "tooltip-text")
+        .attr("x", 0)
+        .attr("y", 0)
+        .style("font-size", "12px")
+        .style("opacity", 0);
+    const rect0=svg.append("rect")  
+        .attr("width", width) 
+        .attr("height", height) 
+        .attr("fill", "transparent") 
+        .attr("stroke", "none");
+
+    const tooltipXText = svg.append("text")  
+        .attr("class", "tooltip_axis_text")
+    const tooltipY0Text = svg.append("text")  
+        .attr("class", "tooltip_axis_text")
+    const tooltipY1Text = svg.append("text")  
+        .attr("class", "tooltip_axis_text")
+
+    // 监听鼠标移动事件
+    rect0.on("mousemove", function(event) {
+        const [mouseX, mouseY] = d3.pointer(event);
+        // console.log(mouseX,mouseY)
+        // 检查鼠标是否在可视化图内
+        if (mouseX >= 0 && mouseY >= 0 && mouseX <= width && mouseY <= height) {
+            // 更新竖线位置
+            verticalLine.attr("x1", mouseX)
+                .attr("y1", 0)
+                .attr("x2", mouseX)
+                .attr("y2", height)
+                .style("opacity", line_opacity);
+
+            // 更新横线位置
+            horizontalLine.attr("x1", 0)
+                .attr("y1", mouseY)
+                .attr("x2", width)
+                .attr("y2", mouseY)
+                .style("opacity", line_opacity);
+
+            // 查找鼠标所在位置对应的数据点
+            const bisectDate = d3.bisector(d => d.date).left;
+            const x0 = x.invert(mouseX);
+            const i = bisectDate(data, x0, 1);
+            const d0 = data[i - 1];
+            const d1 = data[i];
+            const d = x0 - d0.date > d1.date - x0 ? d1 : d0;
+
+            const xDate = formatDate(x.invert(mouseX)); // 获取对应的日期  
+            tooltipXText  
+                .attr("x", mouseX ) // 放置在鼠标位置附近  
+                .attr("y", height + margin.bottom) // 放置在SVG底部或你想要的任何位置  
+                .text(`${xDate}`)  
+                .style("opacity", 1);
+            const yValue = yBikeUsage.invert(mouseY).toFixed(0); // 反转y比例尺以获取原始值，并可能格式化  
+            var y1Value;
+            tooltipY0Text
+                .attr("x", -25) 
+                .attr("y", mouseY+2)
+                .text(`${yValue}`)  
+                .style("opacity", 1);
+            // 更新提示框位置
+            tooltipRect.attr("x", mouseX + 10)
+                .attr("y", mouseY - 40)
+                .style("opacity", rect_opacity);
+
+            tooltipText.attr("x", mouseX + 20)
+                .attr("y", mouseY - 20)
+                .text(`Date: ${formatDate(d.date)}`)
+                .style("opacity", 1);
+
+            tooltipText.append("tspan")
+                .attr("x", mouseX + 20)
+                .attr("dy", "1.2em")
+                .text(`Bike Usage: ${d.bikeUsage}`)
+                .style("opacity", 1);
+            const tt=tooltipText.append("tspan")
+                .attr("x", mouseX + 20)
+                .attr("dy", "1.2em")
+                .style("opacity", 1);
+            if(status==1){
+                tt.text(`Supply: ${d.supply}`)
+                y1Value=ySupply.invert(mouseY).toFixed(0);
+            }
+            else if(status==2){
+                tt.text(`Stations: ${d.stations}`)
+                y1Value=yStations.invert(mouseY).toFixed(0);
+            }
+            else if(status==3){
+                tt.text(`Rainy Days: ${d.rainyDays}`)
+                y1Value=yRainyDays.invert(mouseY).toFixed(0);
+            }
+            if(status!=0){
+            tooltipY1Text
+                .attr("x", width+15)
+                .attr("y", mouseY+2)
+                .text(`${y1Value}`)
+                .style("opacity", 1);
+            }
+        } else {
+            // 如果鼠标不在可视化图内，则隐藏提示框和动态提示线
+            tooltipRect.style("opacity", 0);
+            tooltipText.style("opacity", 0);
+            verticalLine.style("opacity", 0);
+            horizontalLine.style("opacity", 0);
+            tooltipY0Text.style("opacity", 0);
+            tooltipY1Text.style("opacity", 0); 
+        }
+    })
+    rect0.on("mouseout",function(event){
+        tooltipRect.style("opacity", 0);
+        tooltipText.style("opacity", 0);
+        verticalLine.style("opacity", 0);
+        horizontalLine.style("opacity", 0);
+        tooltipXText.style("opacity", 0);  
+        tooltipY0Text.style("opacity", 0);
+        tooltipY1Text.style("opacity", 0); 
+    })
+
+    var status=0  
+    // 按钮点击事件
+    d3.select("#supply-button").on("click", () => drawLine(lineSupply,ySupply,"Supply"));
+    d3.select("#stations-button").on("click", () => drawLine(lineStations,yStations,"Stations"));
+    d3.select("#raindays-button").on("click", drawBars);
+
+    function drawLine(line,y_axis,y_name) {
+        if(y_name=="Supply"){
+            status=1;
+        }
+        else if(y_name=="Stations"){
+            status=2;
+        }
+        svg.selectAll(".line").remove();
+        svg.selectAll(".bar").remove();
+        svg.selectAll(".y.axis-right").remove();
+
+        svg.append("g")
+            .attr("class", "y axis-right")
+            .attr("transform", `translate(${width},0)`)
+            .call(d3.axisRight(y_axis));
+            
+        svg.append("text")
+            .attr("class", "y axis-right")
+            .attr("transform", "rotate(90)")
+            .attr("y", -width-margin.left+20)
+            .attr("x", (height / 2)-10)
+            .attr("dy", "1em")
+            .style("text-anchor", "middle")
+            .text(y_name);
+
+        var path=svg.append("path")
+            .lower()
+            .datum(data)
+            .attr("class", "line")
+            .attr("d", line)
+            .attr("stroke",()=>{
+                if(y_name=="Supply"){
+                    return color[1]
+                }
+                else{
+                    return color[0]
+                }
+            });
+        line_animation(path)
+    }
+    var bar_width=x(data[1].date)-1.5
+    function drawBars() {
+        status=3
+        svg.selectAll(".line").remove();
+        svg.selectAll(".bar").remove();
+        svg.selectAll(".y.axis-right").remove();
+
+        svg.append("g")
+            .attr("class", "y axis-right")
+            .attr("transform", `translate(${width},0)`)
+            .call(d3.axisRight(yRainyDays));
+
+        svg.selectAll(".bar")
+            .data(data)
+            .enter().append("rect")
+            .lower()
+            .attr("class", "bar")
+            .attr("x", (d,i) =>{
+                if(i==0){
+                    return x(d.date)
+                }
+                else{
+                    return x(d.date)-bar_width/2
+                }
+            })
+            .attr("y", 0)
+            .attr("width", (d,i)=>{
+                if(i==0|i==43){
+                    return bar_width/2
+                }
+                else{
+                    return bar_width
+                }
+            })
+            .attr("height", 0) // 将初始高度设为 0
+            .attr("fill", color[3])
+            .transition()
+            .delay((d, i) => i * 30) 
+            .duration(1000)
+            .ease(d3.easeBounceOut)
+            .attr("height", d => yRainyDays(d.rainyDays));
+        
+        svg.append("text")
+            .attr("class", "y axis-right")
+            .attr("transform", "rotate(90)")
+            .attr("y", -width-margin.left+35)
+            .attr("x", (height / 2)-10)
+            .attr("dy", "1em")
+            .style("text-anchor", "middle")
+            .text("Rainydays");
+    }
+
+</script>
+
+</body>
+</html>

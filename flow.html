@@ -86,6 +86,7 @@
         <div id="other">
             <div class="pie-chart"></div>
         </div>
+        
     </div>
     <script>
         let geojsonData;
@@ -104,9 +105,14 @@
         const svgLayer = L.svg().addTo(map);
         const svg = d3.select("#map").select("svg");
         const g = svg.append("g").attr("class", "leaflet-zoom-hide");
+        
 
         // 定義顏色標度
-        const color = d3.scaleOrdinal(d3.schemeCategory10);
+        const tableauColors = d3.schemeTableau10; // T10种颜色
+        const set3Colors = d3.schemeSet3; // 9种颜色
+        const combinedColors = [...tableauColors, ...set3Colors]; // 将两个颜色数组合并，得到19种颜色
+        const color = d3.scaleOrdinal(combinedColors); // 创建序数比例尺
+
 
         // 添加台北市的GeoJSON
         d3.json("taipei.geojson").then(data => {
@@ -165,7 +171,7 @@
                     const source = row[''];
                     const sourceCentroid = centroidData.find(d => d.TOWNNAME === source);
                     if (sourceCentroid && !districtSet.has(source)) {
-                        nodes.push({ id: source, value: +row[source], lat: +sourceCentroid.lat, lon: +sourceCentroid.lon });
+                        nodes.push({ id: source, value: +row[source], lat: +sourceCentroid.lat, lon: +sourceCentroid.lon, linkData: [] });
                         districtSet.add(source);
                     }
                     header.forEach(target => {
@@ -175,6 +181,7 @@
                             links.push({ source: source, target: target, value: value, 
                                          sourceLat: +sourceCentroid.lat, sourceLon: +sourceCentroid.lon,
                                          targetLat: +targetCentroid.lat, targetLon: +targetCentroid.lon });
+                            nodes.find(n => n.id === source).linkData.push({ target: target, value: value });   
                         }
                     });
                 });
@@ -274,19 +281,24 @@
                 matrixData.forEach(row => {
                     const source = row[''];
                     if (!districtSet.has(source)) {
-                        nodes.push({ id: source, value: +row[source] });
+                        nodes.push({ id: source, value: +row[source] , linkData: []});
                         districtSet.add(source);
                     }
                     header.forEach(target => {
                         const value = +row[target];
                         if (source !== target && value > 0) {
                             links.push({ source: source, target: target, value: value });
+                            nodes.find(n => n.id === source).linkData.push({ target: target, value: value });
                         }
                     });
                 });
                 const linkValues = links.map(d => d.value);
                 const maxLinkValue = Math.max(...linkValues);
                 const minLinkValue = Math.min(...linkValues);
+                const pieExtraRadius = 1.4;
+                const Radius = function(d) {
+                    return Math.sqrt(d) / 50;
+                };
 
                 const infernoScale = d3.scaleSequential(d3.interpolateInferno)
                     .domain([minLinkValue, maxLinkValue]);
@@ -315,7 +327,7 @@
                     .selectAll("circle")
                     .data(nodes)
                     .enter().append("circle")
-                    .attr("r", d => Math.sqrt(d.value) / 100)
+                    .attr("r", d => Radius(d.value))
                     .attr("fill", d => color(d.id))
                     .call(d3.drag()
                         .on("start", dragstarted)
@@ -357,8 +369,19 @@
                     .nodes(nodes)
                     .on("tick", ticked);
 
+
+
                 simulation.force("link")
-                    .links(links);
+                    .links(links)
+                    .distance(200);
+
+                const pie = d3.pie().value(d => d.value);
+                const arc = d3.arc();
+
+                const pieGroups = svg.selectAll(".pieGroup")
+                    .data(nodes)
+                    .enter().append("g")
+                    .attr("class", "pieGroup");
 
                 function ticked() {
                     link
@@ -370,7 +393,82 @@
                     node
                         .attr("cx", d => d.x)
                         .attr("cy", d => d.y);
+
+                    pieGroups.attr("transform", d => `translate(${d.x}, ${d.y})`)
+                        .each(drawPie);
+                    
+                    textgroup.attr("transform", d => `translate(${d.x}, ${d.y})`)
                 }
+                function drawPie(nodeData) {
+                    const pieData = pie(nodeData.linkData);
+                    const nodeRadius = Radius(nodeData.value);
+                    const g = d3.select(this);
+                    const path = g.selectAll("path")
+                        .data(pieData);
+
+                    path.enter().append("path")
+                        .merge(path)
+                        .attr("d", arc.innerRadius(nodeRadius).outerRadius(nodeRadius*pieExtraRadius))
+                        .attr("fill", d => color(d.data.target));
+
+                    path.exit().remove();
+                }
+                node.on("dblclick", function(event, d) {
+                    if (d3.select(this).classed("focused")) {
+                        // 如果节点已经聚焦，恢复显示所有节点和边
+                        node.style("opacity", 1);
+                        link.style("opacity", 1);
+                        node.classed("focused", false);
+                    } else{
+                        const connectedNodes = new Set();
+                        connectedNodes.add(d.id); // 添加自身
+                        d3.select(this).classed("focused", true);
+
+                        links.forEach(link => {
+                            if (link.source.id === d.id) {
+                                connectedNodes.add(link.target.id);
+                                console.log(link);
+                            }
+                            if (link.target.id === d.id) {
+                                connectedNodes.add(link.source.id);
+                                console.log(link);
+                            }
+                        });
+                        console.log(connectedNodes);
+                        // 更新节点和边的显示状态
+                        node.style("opacity", node => connectedNodes.has(node.id) ? 1 : 0);
+                        // 只保留与d直接相连的边
+                        link.style("opacity", link => link.source.id === d.id || link.target.id === d.id ? 1 : 0);
+
+                        // 更新饼图的显示状态
+                        pieGroups.style("opacity", pieGroup => connectedNodes.has(pieGroup.id) ? 1 : 0);
+                }});
+
+                // 在每个节点上饼图的中心添加文字
+                const textgroup = svg.selectAll(".textgroup")
+                    .data(nodes)
+                    .enter().append("g")
+                    .attr("class", "textgroup");
+                
+                textgroup.append("text")
+                    .attr("class", "label")
+                    .attr("text-anchor", "middle")
+                    .attr("dy", "0.35em")
+                    .text(function(d) {
+                        return d.id.substring(0, 2);
+
+                    })
+                    .attr("fill", "white")
+                    .attr("font-size", function(d) {
+                        r = Radius(d.value);
+                        r = r * r / 10
+                        r = Math.round(r);
+                        console.log(r);
+                        r = toString(r);
+                        r = '' + r + 'px'
+                        return r;
+                    });
+                    
 
                 function dragstarted(event, d) {
                     if (!event.active) simulation.alphaTarget(0.3).restart();
@@ -410,7 +508,7 @@
             .attr("transform", `translate(${pieWidth / 2}, ${pieHeight / 2})`);
 
         // 設置甜甜圈圖顏色標度
-        const pieColor = d3.scaleOrdinal(d3.schemeCategory10);
+        const pieColor = color;
 
         // 模擬甜甜圈圖數據
         const initialPieData = {

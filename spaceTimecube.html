@@ -1,0 +1,152 @@
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+    <title>Intro to SceneLayer | Sample | ArcGIS Maps SDK for JavaScript 4.29</title>
+    <style>
+      html,
+      body,
+      #viewDiv {
+        padding: 0;
+        margin: 0;
+        height: 100%;
+        width: 100%;
+      }
+      .chart {
+        width: 100%;
+        height: 300px;
+      }
+    </style>
+
+    <link rel="stylesheet" href="https://js.arcgis.com/4.29/esri/themes/light/main.css" />
+    <script src="https://js.arcgis.com/4.29/"></script>
+  </head>
+
+  <body>
+    <div id="viewDiv"></div>
+    <script>
+      require([
+        'https://d3js.org/d3.v7.min.js',
+        "esri/Map",
+        "esri/views/SceneView",
+        "esri/layers/SceneLayer",
+        "esri/rest/support/Query"
+      ], function(d3, Map, SceneView, SceneLayer, Query) {
+        // Create Map
+        const map = new Map({
+          basemap: "dark-gray-vector",
+          ground: "world-elevation"
+        });
+
+        // Create the SceneView
+        const view = new SceneView({
+          container: "viewDiv",
+          map: map,
+          camera: {
+            position: [121, 25, 707],
+            tilt: 81,
+            heading: 50
+          }
+        });
+
+        // Create SceneLayer and add to the map
+        const sceneLayer = new SceneLayer({
+          portalItem: {
+            id: "055284de6b904452baf7d0b4ee4ff2fd"
+          },
+          popupTemplate: {
+            content: updatePopupContent
+          },
+          outFields: ['*']
+        });
+        map.add(sceneLayer);
+
+        // Function to update popup content
+        function updatePopupContent(feature) {
+          const attributes = feature.graphic.attributes;
+          //console.log(attributes);
+          const container = document.createElement("div");
+          container.innerHTML = `<div class="chart" id="chart-${attributes.ELEMENT}"></div>`;
+          getChartData(attributes.LOCATION).then(function(data) {
+            //console.log(data);
+            drawChart(`#chart-${attributes.ELEMENT}`, data, attributes.VALUE);
+          }).catch(function(error) {
+            console.error("Error fetching chart data: ", error);
+            container.innerHTML = "<p>Error loading chart data.</p>";
+          });
+
+          return container;
+        }
+
+        // Function to get data for the chart
+        function getChartData(locationID) {
+          const query = sceneLayer.createQuery();
+          query.where = `LOCATION = ${locationID}`;
+          query.outFields = ["*"];
+          console.log(query);
+          return sceneLayer.queryFeatures(query)
+            .then(function(response) {
+              return response.features.map(function(feature) {
+                return {
+                  timeStep: feature.attributes.TIME_STEP,
+                  value: feature.attributes.VALUE
+                };
+              });
+            })
+            .catch(function(error) {
+              console.error("Error querying features: ", error);
+              throw error; // Re-throw the error to be caught by the calling function
+            });
+        }
+
+        // Function to draw the chart using d3.js
+        function drawChart(selector, data, currentStep) {
+          const margin = { top: 20, right: 30, bottom: 30, left: 40 };
+          const width = 300 - margin.left - margin.right;
+          const height = 200 - margin.top - margin.bottom;
+
+          const svg = d3.select(selector)
+            .append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+            .append("g")
+            .attr("transform", `translate(${margin.left},${margin.top})`);
+
+          const x = d3.scaleLinear()
+            .domain(d3.extent(data, d => d.timeStep))
+            .range([0, width]);
+
+          svg.append("g")
+            .attr("transform", `translate(0,${height})`)
+            .call(d3.axisBottom(x).ticks(data.length));
+
+          const y = d3.scaleLinear()
+            .domain([0, d3.max(data, d => d.value)])
+            .range([height, 0]);
+
+          svg.append("g")
+            .call(d3.axisLeft(y));
+
+          svg.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "steelblue")
+            .attr("stroke-width", 1.5)
+            .attr("d", d3.line()
+              .x(d => x(d.timeStep))
+              .y(d => y(d.value)));
+
+          // Highlight the current time step
+          svg.selectAll("dot")
+            .data(data)
+            .enter()
+            .append("circle")
+            .attr("cx", d => x(d.timeStep))
+            .attr("cy", d => y(d.value))
+            .attr("r", 4)
+            .attr("fill", d => d.timeStep === currentStep ? "red" : "black");
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Bar Chart with D3.js and Map with Leaflet</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #FEF9F2;
+            font-family: 'Noto Sans TC', sans-serif;
+        }
+        #map {
+            height: 600px;
+            width: 500px;
+        }
+        .chart-container {
+            display: flex;
+            flex-direction: left;
+            align-items: center;
+        }
+        .bar {
+            fill: steelblue;
+        }
+        .bar:hover {
+            fill: orange !important;
+        }
+        .tooltip {
+            position: absolute;
+            text-align: center;
+            width: auto;
+            height: auto;
+            padding: 5px;
+            background: lightsteelblue;
+            border: 0px;
+            border-radius: 8px;
+            pointer-events: none;
+        }
+        .legend {
+            font-size: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div class="chart-container">
+        <svg id="chart"></svg>
+    </div>
+    <script>
+        // D3 Chart
+        const data = [
+            {route: "臺灣科技大學側門 - 捷運公館站(2號出口)", count: 32099, distance: 826},
+            {route: "臺灣科技大學後門 - 捷運公館站(2號出口)", count: 26147, distance: 1132},
+            {route: "捷運公館站(2號出口) - 臺灣科技大學側門", count: 25657, distance: 1655},
+            {route: "捷運公館站(2號出口) - 臺灣科技大學後門", count: 23338, distance: 1794},
+            {route: "捷運劍南路站(2號出口) - 樂群二敬業四路口", count: 21030, distance: 729},
+            {route: "百齡國小 - 捷運劍潭站(2號出口)", count: 20104, distance: 735},
+            {route: "樂群二敬業四路口 - 捷運劍南路站(2號出口)", count: 19658, distance: 809},
+            {route: "捷運劍潭站(2號出口) - 百齡國小", count: 19396, distance: 1937},
+            {route: "捷運台北101/世貿站(2號出口) - 臺北醫學大學", count: 18980, distance: 838},
+            {route: "清江國小 - 捷運奇岩站(三合街)", count: 18787, distance: 603},
+            {route: "捷運奇岩站(三合街) - 清江國小", count: 16958, distance: 1467},
+            {route: "捷運象山站(2號出口) - 象山公園", count: 16128, distance: 359},
+            {route: "臺灣師範大學(圖書館) - 捷運古亭站(5號出口)", count: 15168, distance: 689},
+            {route: "象山公園 - 捷運象山站(2號出口)", count: 14856, distance: 359},
+            {route: "臺北市立圖書館(總館) - 捷運大安森林公園站(5號出口)", count: 14608, distance: 2432},
+            {route: "健安新城 - 捷運南京三民站(1號出口)", count: 14606, distance: 557},
+            {route: "臺北醫學大學 - 捷運台北101/世貿站(2號出口)", count: 14576, distance: 837},
+            {route: "捷運古亭站(5號出口) - 臺灣師範大學(圖書館)", count: 14555, distance: 970},
+            {route: "捷運大安森林公園站(5號出口) - 臺北市立圖書館(總館)", count: 13683, distance: 693},
+            {route: "蘭興公園 - 捷運芝山站(2號出口)_1", count: 13382, distance: 1400}
+        ];
+
+const margin = {top: 0, right: 20, bottom: 0, left: 250},
+      width = 750 - margin.left - margin.right,
+      height = 400 - margin.top - margin.bottom;
+
+const x = d3.scaleLinear().range([0, width]);
+const y = d3.scaleBand().range([height, 0]).padding(0.1);
+
+const svg = d3.select("#chart")
+    .attr("width", width + margin.left + margin.right)
+    .attr("height", height + margin.top + margin.bottom)
+    .append("g")
+    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+x.domain([0, d3.max(data, function(d) { return d.count; })]);
+y.domain(data.map(function(d) { return d.route; }));
+
+const tooltip = d3.select("body").append("div")
+    .attr("class", "tooltip")
+    .style("opacity", 0);
+
+// Initialize Leaflet map
+const map = L.map('map', { preferCanvas: true }).setView([25.08, 121.52], 12);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+}).addTo(map);
+
+let routeLayers = {};
+
+// Load and style main routes
+fetch('weekday_routes_directions.geojson').then(function(response) {
+    return response.json();
+}).then(function(geojson) {
+    L.geoJSON(geojson, {
+        onEachFeature: (feature, layer) => {
+            layer.setStyle({
+            color: 'blue',
+            weight: 3,
+            opacity: 0.5
+        });
+
+        }
+    }).addTo(map);
+});
+
+// Load and style metro routes
+fetch('metro.geojson').then(function(response) {
+    return response.json();
+}).then(function(geojson) {
+    L.geoJSON(geojson, {
+        filter: function(feature) {
+            return feature.properties["開闢情形"] === "已通車";
+        },
+        style: {
+            color: 'red',
+            opacity: 0.5,
+            weight: 3
+        }
+    }).addTo(map);
+});
+
+// Bar events for D3
+svg.selectAll(".bar")
+    .data(data)
+    .enter().append("rect")
+    .attr("class", "bar")
+    .attr("width", function(d) { return x(d.count); })
+    .attr("y", function(d) { return y(d.route); })
+    .attr("height", y.bandwidth())
+    .style("fill", function(d) { return d3.interpolateViridis(d.distance / 2432); })
+    .on("mouseover", function(event, d) {
+        tooltip.transition().duration(200).style("opacity", .9);
+        tooltip.html("路線: " + d.route + "<br>次數: " + d.count + "<br>距離: " + d.distance)
+            .style("left", (event.pageX) + "px")
+            .style("top", (event.pageY - 28) + "px");
+        highlightRoute(d.route);
+    })
+    .on("mouseout", function() {
+        tooltip.transition().duration(500).style("opacity", 0);
+        resetRouteStyles();
+    });
+
+// Append axes
+svg.append("g")
+    .attr("transform", "translate(0," + height + ")")
+    .call(d3.axisBottom(x));
+
+svg.append("g").call(d3.axisLeft(y));
+
+    </script>
+</body>
+</html>

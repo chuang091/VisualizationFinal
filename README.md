@@ -1,3 +1,7 @@
+Here is the Project introduction in brief.
+
+![alt text](image-1.png)
+
 # Youbike Visualization
 
 共享单车作为城市短途出行的新兴方式，在解决交通拥堵、改善环境质量等方面发挥了积极作用。然而，如何更好地理解和利用共享单车的使用数据，对城市交通规划和管理具有重要意义。

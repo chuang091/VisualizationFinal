@@ -54,7 +54,7 @@ const intervals = [
   "100-inf mins",
 ];
 
-d3.csv("/data/BikeCountPer10mins.csv").then(function (data) {
+d3.csv("BikeCountPer10mins.csv").then(function (data) {
   const formattedData = [];
 
   data.forEach((row) => {
